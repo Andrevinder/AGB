@@ -1,13 +1,57 @@
 import config.ConfigLoader
 import log.LoggerUtil
-import org.eclipse.jgit.api.CheckoutCommand
 import repo.RepoManager
 import telegram.Sender
 import java.io.File
+import sun.security.provider.MD5
+import java.security.MessageDigest
 import java.time.LocalTime
+import javax.xml.bind.DatatypeConverter
 import kotlin.system.exitProcess
 
+
 var lastCommitTime: LocalTime? = null
+
+fun getChecksum(md5: MessageDigest, folder: File) {
+    for (file: File in folder.listFiles()!!){
+        if (file.isFile) {
+            val inps = file.inputStream()
+            md5.update(inps.readBytes())
+            inps.close()
+        } else {
+            if (file.name != ".git")
+                getChecksum(md5, file)
+        }
+    }
+}
+
+fun checkChecksum(): Boolean {
+    val lastChecksumFile = File("last_checksum.txt")
+    val md5 = MessageDigest.getInstance("MD5")
+    val folder = File(ConfigLoader.config!!["folder"] as String)
+    getChecksum(md5, folder)
+    val checksum = DatatypeConverter.printHexBinary(md5.digest()).toUpperCase()
+
+    if (! lastChecksumFile.exists()) {
+        lastChecksumFile.createNewFile()
+        val outstr = lastChecksumFile.outputStream().bufferedWriter()
+        outstr.write(checksum)
+        outstr.close()
+        return false
+    } else {
+        val inpstr = lastChecksumFile.inputStream().bufferedReader()
+        val lastChecksum = inpstr.readText()
+        inpstr.close()
+        if (lastChecksum == checksum)
+            return true
+        else {
+            val outstr = lastChecksumFile.outputStream().bufferedWriter()
+            outstr.write(checksum)
+            outstr.close()
+            return false
+        }
+    }
+}
 
 fun commitAndPushAll() {
     println()
@@ -16,6 +60,17 @@ fun commitAndPushAll() {
     val password = ConfigLoader.config!!["password"] as String
     val token = ConfigLoader.config!!["githubToken"] as String
     val authMethod = ConfigLoader.config!!["authMethod"] as String
+
+    try {
+        if (checkChecksum()) {
+            LoggerUtil.printAndSend("Checksums are identical. Not Proceeding with committing and pushing.")
+            return
+        }
+    } catch (exc: Exception) {
+        LoggerUtil.printAndSend("Failed to check for checksums, proceeding with committing and pushing.")
+        exc.printStackTrace()
+    }
+
     try {
         RepoManager.commitAll()
         LoggerUtil.printAndSend("Committed successfully!")

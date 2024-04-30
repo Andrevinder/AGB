@@ -16,6 +16,7 @@ dependencies {
     implementation("org.eclipse.jgit:org.eclipse.jgit:6.9.0.202403050737-r")
     implementation("org.telegram:telegrambots:6.9.7.1")
     implementation("org.yaml:snakeyaml:2.2")
+
 }
 
 tasks.test {
